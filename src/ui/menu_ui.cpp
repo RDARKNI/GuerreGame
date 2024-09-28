@@ -1,263 +1,188 @@
 #include "menu_ui.hpp"
 
-#include <curses.h>
-
 #include <cassert>
-#include <stack>
+#include <utility>
 
-#include "../controller/network_helper.hpp"
+#include "../controller/controller.hpp"
 #include "../game_config.hpp"
-#include "../input_parser.hpp"
-size_t PLAYER_INDEX;
-size_t PLAYER_COUNT;
-size_t B_H;
-size_t B_W;
-Role role;
-// char ip_address[64]{"000.000.000.000"};
-char ip_address[64]{"127.000.000.001"};
-
-const char* player_names[9]{"Gaia",     "Player 1", "Player 2",
-                            "Player 3", "Player 4", "Player 5",
-                            "Player 6", "Player 7", "Player 8"};
+#include "../input/input_parser.hpp"
+#include "../network/network_helper.hpp"
+#include "../save/save.hpp"
+using enum ParsedInput;
 
 MenuUI::MenuUI() {
-  PLAYER_INDEX = 0;
-  PLAYER_COUNT = 2;
-  B_H = 20;
-  B_W = 20;
+  xo = 60;
+  seed = 0;
   role = LOCAL;
+  settings.act = forestgen_default;
 }
-
-int MenuUI::menu_loop() {
-  // for (int i = 0; i < screen_width; i += 2) {
-  //   int j = i;
-  //   int s = 0;
-  //   while (s < screen_height && j < screen_width) {
-  //     mvaddch(s, j, ' ' | A_STANDOUT);
-  //     napms(10);
-  //     refresh();
-  //     ++s;
-  //     j++;
-  //   }
-  //   napms(100);
-  //   // for (int j = 0; j < screen_width; ++j) {
-  //   //   mvaddch(i, j, '-' | COLOR_PAIR(16));
-  //   //   napms(10);
-  //   //   refresh();
-  //   // }
-  //   //  for (int j = 0; j < B_W; ++j) {
-  //   //    mvaddch(i, j, ' ' | COLOR_PAIR(0));
-  //   //    // napms(50);
-  //   //  }
-  // }
-  menu_stack = std::stack<main_menu_id>{{MAIN}};
-  curs_set(0);
-  while (1) {
+std::vector<UserInput> MenuUI::menu_loop() {
+  menu_stack = std::stack<main_menu_id>{{main_menu_id::MAIN}};
+  while (true) {
     switch (menu_stack.top()) {
-      case MAIN:
-        role = LOCAL;
+      case main_menu_id::MAIN:
         main_menu();
         break;
-      case LOCAL_RULES:
-        PLAYER_INDEX = 0;
+      case main_menu_id::SETTINGS:
         settings_menu();
         break;
-      case HOST_RULES:
-        PLAYER_INDEX = 1;
-        settings_menu();
-        break;
-      case HOST_WAIT:
-        role = HOST;
-        init_connection();
-        // todo
-        break;
-      case PCOUNT:
-        pcount_menu();
-        break;
-      case DIMS:
-        dim_menu();
-        break;
-      case CLIENT_CONNECT:
+      case main_menu_id::CLIENT_CONNECT:
         client_connect_menu();
         break;
-      case CLIENT_IP:
-        ip_input();
-        break;
-      case CLIENT_WAIT:
-        role = CLIENT;
-        init_connection();
-        break;
-      case CLOSE_GAME:
-        return 1;
-      case FINISH:
+      case main_menu_id::CLOSE_GAME:
+        return {};
+      case main_menu_id::FINISH:
+        if (history.empty()) {
+          if (role == LOCAL) {
+            settings.dst.x = 0;
+          }
+          history = {settings};
+        }
+        if (role == HOST) {
+          history[0].dst.x = 1;
+        }
+        if (role == HOST) {
+          if (init_connection_host(history[0])) {
+            menu_stack = std::stack<main_menu_id>({main_menu_id::MAIN});
+          }
+        } else if (role == CLIENT) {
+          if (init_connection_client(history[0])) {
+            menu_stack = std::stack<main_menu_id>({main_menu_id::MAIN});
+          }
+        }
         clear();
-        return 0;
+        refresh();
+        xo = 0;
+        return history;
       default:
-        assert(0);
-    }
-  }
-}
-const char* client_connect_options[4]{"Local", "Confirm"};
-
-void render_client_connect_menu(int selected = -1) {
-  clear();
-  static int off = screen_width / 4 - 5;
-  int pos = 0;
-  mvprintw(5, off, "Host IP-Address:  ");
-  if (pos == selected) {
-    attron(A_BLINK | A_STANDOUT);
-  }
-  printw("%s", ip_address);
-  attroff(A_BLINK | A_STANDOUT);
-  pos++;
-  mvprintw(6, off + 5, "     ");
-  if (pos == selected) {
-    attron(A_BLINK | A_STANDOUT);
-  }
-  printw("CONFIRM");
-  attroff(A_BLINK | A_STANDOUT);
-  refresh();
-}
-void MenuUI::client_connect_menu() {
-  static int y{0};
-  curs_set(0);
-  render_client_connect_menu(y);
-  while (1) {
-    switch (input_handler()) {
-      case UP:
-        render_client_connect_menu((y = (y - 1 + 2) % 2));
-        break;
-      case DOWN:
-        render_client_connect_menu((y = (y + 1) % 2));
-        break;
-      case CONF:
-        menu_stack.push((main_menu_id)(!y ? CLIENT_IP : CLIENT_WAIT));
-        return;
-      case BACK:
-        return menu_stack.pop();
-      default:
-        break;
+        std::unreachable();
     }
   }
 }
 
-const char* main_options[4]{"Local", "Client", "Host", "Quit"};
+/*
+        y = (y - 1 + 4) % 4;
+        mainwindow.move_cursor(y);
+        break;
+      case down:
+        y = (y + 1) % 4;
+        mainwindow.move_cursor(y);
+        break;
+*/
 void MenuUI::main_menu() {
   static int y{0};
-  render_main_menu(y);
-  napms(500);
-  while (1) {
+  mainwindow.move_cursor(y);
+  constexpr int siz{arr_size(main_options)};
+  while (true) {
     switch (input_handler()) {
-      case UP:
-        render_main_menu((y = (y - 1 + 4) % 4));
+      case up:
+        y = (y - 1 + siz) % siz;
+        mainwindow.move_cursor(y);
         break;
-      case DOWN:
-        render_main_menu((y = (y + 1) % 4));
+      case down:
+        y = (y + 1) % siz;
+        mainwindow.move_cursor(y);
         break;
-      case CONF:
-        menu_stack.push((main_menu_id)(y + 1));
-        return;
+      case conf:
+        if (y == 3) {
+          return menu_stack.push(main_menu_id::CLOSE_GAME);
+        }
+        role = static_cast<Role>(y);
+        if (y == 1) {
+          mainwindow.hide();
+          return menu_stack.push(main_menu_id::CLIENT_CONNECT);
+        }
+        mainwindow.hide();
+        return menu_stack.push(main_menu_id::SETTINGS);
       default:
         break;
     }
   }
-}
-void MenuUI::render_main_menu(int selected) {
-  clear();
-  static int offset = screen_width / 4 - 3;
-  int i{0};
-  for (const char* option : main_options) {
-    if (i == selected) {
-      attron(A_BLINK | A_STANDOUT);
-    }
-    mvaddstr(i + 5, offset, option);
-    i++;
-    attroff(A_BLINK | A_STANDOUT);
-  }
-  refresh();
 }
 
 void MenuUI::settings_menu() {
+  settingswindow.show();
+  Controller{{settings}, LOCAL};
+  constexpr int siz{5};
   static int y{0};
-  render_settings_menu(y);
-  while (1) {
+  settingswindow.move_cursor(y, 0);
+  while (true) {
     switch (input_handler()) {
-      case UP:
-        render_settings_menu((y = (y - 1 + 3) % 3));
+      case up:
+        y = (y - 1 + siz) % siz;
+        settingswindow.move_cursor(y, 0);
         break;
-      case DOWN:
-        render_settings_menu((y = (y + 1) % 3));
+      case down:
+        y = (y + 1) % siz;
+        settingswindow.move_cursor(y, 0);
         break;
-      case CONF:
+      case conf:
         switch (y) {
           case 0:
-            return menu_stack.push(PCOUNT);
+            return pcount_menu();
           case 1:
-            return menu_stack.push(DIMS);
+            return dim_menu();
+          case 2:
+            return forestationmenu();
+          case 3:
+            settingswindow.hide();
+            return savefilemenu();
           default:
-            return menu_stack.push(menu_stack.top() == LOCAL_RULES ? FINISH
-                                                                   : HOST_WAIT);
+            return menu_stack.push(main_menu_id::FINISH);
         }
-      case BACK:
+        break;
+      case back:
+        settingswindow.hide();
         return menu_stack.pop();
       default:
         break;
     }
   }
 }
-
-void MenuUI::render_settings_menu(int selected) {
-  clear();
-  static int off = screen_width / 4 - 5;
-  int pos = 0;
-
-  mvprintw(5, off, "PLAYERS:  ");
-  if (pos == selected) {
-    attron(A_BLINK | A_STANDOUT);
+void MenuUI::forestationmenu() {
+  const char prev_forestation{settings.act};
+  settingswindow.move_cursor(2, 1);
+  while (true) {
+    switch (input_handler()) {
+      case right:
+        settings.act = settings.act < forestgen_maximum ? settings.act + 1 : 0;
+        settingswindow.move_cursor(2, 1);
+        break;
+      case left:
+        settings.act = settings.act == 0 ? forestgen_maximum : settings.act - 1;
+        settingswindow.move_cursor(2, 1);
+        break;
+      case conf:
+        return;
+      case back:
+        settings.act = prev_forestation;
+        return;
+      default:
+        break;
+    }
   }
-  printw("%d", PLAYER_COUNT);
-  attroff(A_BLINK | A_STANDOUT);
-  pos++;
-
-  mvprintw(6, off, "BOARD:    ");
-  if (pos == selected) {
-    attron(A_BLINK | A_STANDOUT);
-  }
-  printw("%dx%d", B_H, B_W);
-  attroff(A_BLINK | A_STANDOUT);
-  pos++;
-
-  mvprintw(7, off, "     ");
-  if (pos == selected) {
-    attron(A_BLINK | A_STANDOUT);
-  }
-  printw("CONFIRM");
-  attroff(A_BLINK | A_STANDOUT);
-  refresh();
 }
 
 void MenuUI::pcount_menu() {
-  const size_t pcount{PLAYER_COUNT};
-  while (1) {
+  const char pcount{settings.dst.y};
+  settingswindow.move_cursor(0, 1);
+  while (true) {
     switch (input_handler()) {
-      case RIGHT:
-        if (++PLAYER_COUNT > MAX_PLAYERS) {
-          PLAYER_COUNT = MIN_PLAYERS;
-        }
-        render_settings_menu(0);
+      case right:
+        settings.dst.y =
+            settings.dst.y < MAX_PLAYERS ? settings.dst.y + 1 : MIN_PLAYERS;
+        settingswindow.move_cursor(0, 1);
         break;
-      case LEFT:
-        if (--PLAYER_COUNT < MIN_PLAYERS) {
-          PLAYER_COUNT = MAX_PLAYERS;
+      case left:
+        if (--settings.dst.y < MIN_PLAYERS) {
+          settings.dst.y = MAX_PLAYERS;
         }
-        render_settings_menu(0);
+        settingswindow.move_cursor(0, 1);
         break;
-      case CONF:
-        menu_stack.pop();
+      case conf:
         return;
-      case BACK:
-        PLAYER_COUNT = pcount;
-        menu_stack.pop();
+      case back:
+        settings.dst.y = pcount;
         return;
       default:
         break;
@@ -266,41 +191,38 @@ void MenuUI::pcount_menu() {
 }
 
 void MenuUI::dim_menu() {
-  const int height = B_H;
-  const int width = B_W;
-  while (1) {
+  const Coord dims{settings.src};
+  settingswindow.move_cursor(1, 1);
+  while (true) {
     switch (input_handler()) {
-      case RIGHT:
-        if (++B_W > MAX_W) {
-          B_W = MIN_W;
+      case right:
+        if (++settings.src.x > MAX_W) {
+          settings.src.x = MIN_W;
         }
-        render_settings_menu(1);
+        settingswindow.move_cursor(1, 1);
         break;
-      case LEFT:
-        if (--B_W < MIN_W) {
-          B_W = MAX_W;
+      case left:
+        if (--settings.src.x < MIN_W) {
+          settings.src.x = MAX_W;
         }
-        render_settings_menu(1);
+        settingswindow.move_cursor(1, 1);
         break;
-      case UP:
-        if (++B_H > MAX_H) {
-          B_H = MIN_H;
+      case up:
+        if (++settings.src.y > MAX_H) {
+          settings.src.y = MIN_H;
         }
-        render_settings_menu(1);
+        settingswindow.move_cursor(1, 1);
         break;
-      case DOWN:
-        if (--B_H < MIN_H) {
-          B_H = MAX_H;
+      case down:
+        if (--settings.src.y < MIN_H) {
+          settings.src.y = MAX_H;
         }
-        render_settings_menu(1);
+        settingswindow.move_cursor(1, 1);
         break;
-      case CONF:
-        menu_stack.pop();
+      case conf:
         return;
-      case BACK:
-        B_H = height;
-        B_W = width;
-        menu_stack.pop();
+      case back:
+        settings.src = dims;
         return;
       default:
         break;
@@ -308,7 +230,90 @@ void MenuUI::dim_menu() {
   }
 }
 
-char max_digit(char* str, int pos) {  // TODO
+void MenuUI::savefilemenu() {  // todo debug segfault
+  std::vector<std::string> filenames{get_savefiles()};
+  const int size{(int)filenames.size()};
+  if (!size) {
+    return;
+  }
+  std::vector<const char*> strings;
+  strings.reserve(size);
+  for (const auto& file : filenames) {
+    strings.push_back(file.data());
+  }
+  SaveFileMenu savefilewindow{{10, 15}, {4, 4}, strings};
+
+  int selected{0};
+  std::vector<UserInput> tmp_hist;
+  auto mov{[&]() {
+    tmp_hist = load_game(filenames[selected]);
+    savefilewindow.move_cursor(selected);
+  }};
+  mov();
+  while (true) {
+    Controller test = Controller(tmp_hist, LOCAL);
+    switch (input_handler()) {
+      case up:
+        selected = selected > 0 ? selected - 1 : size - 1;
+        mov();
+        break;
+      case down:
+        selected = selected < size - 1 ? selected + 1 : 0;
+        mov();
+        break;
+      case conf:
+        history = tmp_hist;
+        menu_stack.push(main_menu_id::FINISH);
+        return;
+      case back:
+        return;
+      default:
+        break;
+    }
+  }
+}
+
+void MenuUI::client_connect_menu() {
+  static int index{0};
+  ipwindow.set_inner(false);
+  ipwindow.move_cursor(index);
+  while (true) {
+    switch (input_handler()) {
+      case up:
+        index = index > 0 ? index - 1 : 2;
+        ipwindow.move_cursor(index);
+        break;
+      case down:
+        index = index < 2 ? index + 1 : 0;
+        ipwindow.move_cursor(index);
+        break;
+      case conf:
+        switch (index) {
+          case 0:
+            ip_input();
+            return;
+          case 1:
+            return menu_stack.push(main_menu_id::FINISH);
+          case 2:
+            ipwindow.hide();
+            return menu_stack.pop();
+          default:
+            std::unreachable();
+        }
+        break;
+      case back:
+        ipwindow.hide();
+        return menu_stack.pop();
+      default:
+        break;
+    }
+  }
+}
+
+char max_digit(char* str, int pos) {  //  refactor
+  constexpr int max_ip_segment{255};
+  str += (pos / 4) * 4;
+  pos %= 4;
   int sum = 0;
   int tpot = 0;
   int pot = 1;
@@ -321,7 +326,7 @@ char max_digit(char* str, int pos) {  // TODO
     pot *= 10;
   }
   for (int i = 9; i >= 0; --i) {
-    if (sum + i * tpot <= 255) {
+    if (sum + i * tpot <= max_ip_segment) {
       return i + '0';
     }
   }
@@ -329,165 +334,83 @@ char max_digit(char* str, int pos) {  // TODO
 }
 
 void MenuUI::ip_input() {
-  clear();
-  static int offset = screen_width / 4 - 5;
+  ipwindow.set_inner(true);
   char tmp_ip[sizeof(ip_address)]{};
-  for (int i = 0; i < sizeof(ip_address); ++i) {
-    tmp_ip[i] = ip_address[i];
-  }
-
-  render_client_connect_menu(-1);
-  const int ip_start = offset + 17 + 1;
-  refresh();
-  move(5, ip_start);
-  curs_set(1);
+  constexpr int max_index{14};
+  memcpy(tmp_ip, ip_address, sizeof(ip_address));
   int index = 0;
-  char tmp;
+  ipwindow.move_cursor(index);
   while (true) {
     int ch = getch();
     switch (parse_input(ch)) {
-      case LEFT:
-        if (!index) {
-          index = 14;
-          move(5, ip_start + index);
-          refresh();
-          break;
-        }
-
-        index--;
-        if (!((index + 1) % 4)) {
-          index--;
-        }
-        move(5, ip_start + index);
-        refresh();
-
+      case left:
+        index = !index ? max_index : index - (1 + !(index % 4));
+        ipwindow.move_cursor(index);
         break;
-      case RIGHT:
-        if (index == 14) {
-          index = 0;
-          move(5, ip_start + index);
-          refresh();
-          break;
-        }
-        index++;
-        if (!((index + 1) % 4)) {
-          index++;
-        }
-        move(5, ip_start + index);
-        refresh();
+      case right:
+        index = index == max_index ? 0 : index + (1 + !((index + 2) % 4));
+        ipwindow.move_cursor(index);
         break;
-
-      case UP:
-        if (ip_address[index] <
-            max_digit(ip_address + (index / 4) * 4, index % 4)) {
+      case up:
+        if (ip_address[index] < max_digit(ip_address, index)) {
           ip_address[index]++;
         } else {
           ip_address[index] = '0';
         }
-        addch(ip_address[index]);
-        move(5, ip_start + index);
-        refresh();
+        ipwindow.move_cursor(index);
         break;
-        // 135.90.0.300
-      case DOWN:
+      case down:
         if (ip_address[index] > '0') {
           ip_address[index]--;
         } else {
-          ip_address[index] =
-              max_digit(ip_address + (index / 4) * 4, index % 4);
+          ip_address[index] = max_digit(ip_address, index);
         }
-        addch(ip_address[index]);
-        move(5, ip_start + index);
-        refresh();  // 135.90.20.80
+        ipwindow.move_cursor(index);
         break;
-      case NUM:
-
-        if (ch > max_digit(ip_address + (index / 4) * 4, index % 4)) {
-          if (index % 4 < 2) {
+      case number:
+        if (ch > max_digit(ip_address, index)) {
+          if (index % 4 < 2) {  // either of first two digits
             ip_address[index] = '0';
-            addch(ip_address[index]);
-            index++;
-            ip_address[index] = ch;
-            addch(ip_address[index]);
-            index++;
-            move(5, ip_start + index);
-            refresh();  // 135.9.20.9
+            ip_address[index + 1] = ch;
+            index += 2;
+            ipwindow.move_cursor(index);
+            // 135.9.20.9
           }
           break;
         }
-
         ip_address[index] = ch;
-        if (index < 14) {
-          index++;
-          if (!((index + 1) % 4)) {
-            index++;
-          }
+        if (index < max_index) {
+          index += 1 + !((index + 2) % 4);
         }
-        addch(ch);
-        move(5, ip_start + index);
-        refresh();
+        ipwindow.move_cursor(index);
         continue;
-
-      case DOT:
+      case dot:
         if (index >= 12) {
           break;
         }
-        if ((index % 4) == 0) {
-          break;
-        }
-
-        if ((index % 4) == 1) {
+        if (index % 4 == 1) {
           ip_address[index + 1] = ip_address[index - 1];
           ip_address[index - 1] = '0';
           ip_address[index] = '0';
-          move(5, ip_start + index - 1);
-          addch('0');
-          addch('0');
-          addch(ip_address[index + 1]);
           index += 3;
-          move(5, ip_start + index);
-          refresh();
-          break;
-        }
-        if ((index % 4) == 2) {
+          ipwindow.move_cursor(index);
+        } else if (index % 4 == 2) {
           ip_address[index] = ip_address[index - 1];
           ip_address[index - 1] = ip_address[index - 2];
           ip_address[index - 2] = '0';
-          move(5, ip_start + index - 2);
-          addch(ip_address[index - 2]);
-          addch(ip_address[index - 1]);
-          addch(ip_address[index]);
           index += 2;
-          move(5, ip_start + index);
-          refresh();
         }
+        ipwindow.move_cursor(index);
         break;
-      case BACK:
-        index = 0;
-        for (int i = 0; i < sizeof(ip_address); ++i) {
-          ip_address[i] = tmp_ip[i];
-          addch(ip_address[i]);
-          index++;
-          move(5, ip_start + index);
-        }
-        refresh();
-        curs_set(0);
-        menu_stack.pop();
+      case back:
+        memcpy(ip_address, tmp_ip, sizeof(ip_address));
+        ipwindow.set_inner(false);
         return;
-      case CONF:
-        menu_stack.pop();
+      case conf:
+        ipwindow.set_inner(false);
         return;
       default:
         break;
     }
   }
 }
-
-/*
-
-3 positions:
-If dot: if previous three are all numbers, just jump
-if previous two are numbers, add a zero, move previous two to the right and then
-jump
-
-*/

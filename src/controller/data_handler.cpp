@@ -1,168 +1,95 @@
 #include "data_handler.hpp"
 
-#include <vector>
+DataHandler::DataHandler(UserInput init_settings) : game{init_settings} {}
 
-#include "../game_model/game.hpp"
-#include "../helpers/user_input.hpp"
-
-DataHandler::DataHandler(const UserInput& inputs) : inputs{inputs} {}
-
-std::vector<MenuItem> DataHandler::get_action_items() const {
-  std::vector<MenuItem> menu_items;
-  for (ActionDat action_item : act_data) {
-    menu_items.emplace_back(action_names[action_item.type], action_item.value);
-  }
-  return menu_items;
-}
-
-std::vector<MenuItem> DataHandler::get_option_items() const {
-  std::vector<MenuItem> menu_items;
-  for (OptionDat option_item : act_option_data[inputs.action]) {
-    menu_items.emplace_back(option_names[option_item.type], option_item.value);
-  }
-  return menu_items;
-}
-
-chtype DataHandler::get_sqdat(Coord coords) const {
-  const Pion* const occ = board[coords];
+SquareData DataHandler::get_square_data(Coord coords) const {
+  const Pion& occ = board[coords];
   if (!occ) {
-    return ' ';
+    return SquareData{0};
   }
-  return (piece_constants[occ->get_type()].sign) |
-         (COLOR_PAIR(occ->get_player().get_colour())) |
-         (WA_DIM * ((occ->get_fatigue() > 0) |
-                    (!occ->get_player().get_is_their_turn())));
+  return SquareData{static_cast<unsigned int>(occ.get_type()) +
+                    (occ.get_player().get_colour() << 4) +
+                    (occ.get_fatigue() << 8) +
+                    ((occ.get_player().get_colour() != curr_player_data.y ||
+                      occ.get_fatigue())
+                     << 12) +
+                    (occ.get_pv() << 13)};
 }
-
-SquareData DataHandler::get_piece_data(Coord coords) const {
-  const Pion* const occ = board[coords];
-  if (!occ) {
-    return 0;
+std::vector<SquareData> DataHandler::get_squares_data(
+    const std::vector<Coord>& coords) const {
+  std::vector<SquareData> data;
+  data.reserve(coords.size());
+  for (auto coord : coords) {
+    data.push_back(get_square_data(coord));
   }
-  return (occ->get_pv() << 12) + (occ->get_fatigue() << 8) +
-         (occ->get_player().get_colour() << 4) + occ->get_type();
+  return data;
 }
 
-const ActionDat& DataHandler::get_curr_action() const {
-  return act_data[inputs.action];
-}
-const std::vector<ActionDat>& DataHandler::get_curr_actions() const {
-  return act_data;
-}
-const std::vector<OptionDat>& DataHandler::get_curr_options() const {
-  return act_option_data[inputs.action];
-}
-const std::vector<Coord>& DataHandler::get_curr_targets() const {
-  return act_target_data[inputs.action];
+void DataHandler::select_source(Coord source) {
+  src = source;
+  curr_source = get_square_data(source);
+  curr_actions.clear();
+  const Pion& occ = board[source];
+  if (!occ || occ.get_player().get_colour() != curr_player_data.y) {
+    return;
+  }
+  for (ActionID action_id : occ.get_actions()) {
+    if (action_id == ACTION) {
+      break;
+    }
+    Action& action = *(game.actions[action_id]);
+    bool possible{action.get_fatigue_condition(source)};
+    if (possible && action.takes_options()) {
+      possible &= !action.get_poss_options(source).empty();
+    }
+    if (possible && action.takes_squares()) {
+      possible &= !action.get_poss_squares(source).empty();
+    }
+    curr_actions.emplace_back(action_id, possible);
+  }
 }
 
-int DataHandler::get_current_turn() const { return curr_turn; }
-
-const std::vector<UserInput>& DataHandler::get_history() const {
-  return history;
-}
-
-PlayerData DataHandler::get_current_player_data() const {
-  return {game.get_current_player().get_colour(),
-          game.get_current_player().get_gold()};
-}
-
-Coord DataHandler::get_next_piece_coords() const {
+Coord DataHandler::get_next_piece_coords(Coord src) const {
+  if (src.y < 0) {
+    return game.get_current_player().get_pieces()[0];
+  }
   bool start_found = false;
   for (const auto& piece : game.get_current_player().get_pieces()) {
-    if (piece->get_coords() == inputs.acteur) {
+    if (piece == src) {
       start_found = true;
-    } else if (!piece->get_fatigue() && start_found) {
-      return piece->get_coords();
+    } else if (!board[piece].get_fatigue() && start_found) {
+      return piece;
     }
   }
   for (const auto& piece : game.get_current_player().get_pieces()) {
-    if (!piece->get_fatigue()) {
-      return piece->get_coords();
+    if (!board[piece].get_fatigue()) {
+      return piece;
     }
   }
-  return inputs.acteur;
+  return src;
 }
-Coord DataHandler::get_next_target_coords() const {
-  bool start_found = false;
-  for (const auto& sq : act_target_data[inputs.action]) {
-    if (sq == inputs.target) {
+
+Coord DataHandler::get_next_target_coords(Coord dst) const {
+  bool start_found{false};
+  for (const auto& sq : curr_targets) {
+    if (sq == dst) {
       start_found = true;
     } else if (start_found) {
       return sq;
     }
   }
-  return act_target_data[inputs.action][0];
-}
-
-int DataHandler::send_command() {
-  int res = 0;
-  if (inputs.action >= 0) {
-    res = game.action(inputs);
-  }
-  if (inputs.action == END_TURN) {
-    game.end_turn();
-  }
-  if (inputs.action == CREATE_UNIT) {
-    game.create_unit(inputs.option, inputs.target);
-  }
-  history.push_back(inputs);
-  return res;
+  return curr_targets[0];
 }
 
 void DataHandler::start_selection() {
-  const Player& pl = game.get_current_player();
-  if (!pl.get_pieces().size()) {
-    act_option_data = {{{CREATE_CHATEAU, 1}, {CREATE_PAYSAN, 1}}};
-    return;
-  }
-  if (pl.get_pieces()[0]->get_type() == CHATEAU) {
-    act_option_data[0] = {{CREATE_CHATEAU, 0}, {CREATE_PAYSAN, 1}};
-    return;
-  }
-  act_option_data[0] = {{CREATE_CHATEAU, 1}, {CREATE_PAYSAN, 0}};
-}
-
-void DataHandler::request_action_data() {
-  act_data.clear();
-  act_option_data.clear();
-  act_target_data.clear();
-  const Pion* const occptr = board[inputs.acteur];
-  if (!occptr || !(occptr->get_player().get_is_their_turn())) {
-    return;
-  }
-  const Pion& occ = *occptr;
-  const std::array<ActionID, 5UL>& ac = occ.get_actions();
-  for (int i = 0; i < ac.size() && ac[i] != ACTION; ++i) {
-    Action& action = *(game.actions[ac[i]]);
-    act_data.emplace_back(action.get_type(),
-                          action.get_fatigue_condition(inputs.acteur));
-    act_option_data.emplace_back();
-    act_target_data.emplace_back();
-    if (act_data.back().value && action.takes_options()) {
-      std::vector<OptionID> possible_options =
-          action.get_poss_options(inputs.acteur);
-      if (possible_options.size() == 0) {
-        act_data[i].value = 0;
-        continue;
-      }
-      for (OptionID opt : action_options[action.get_type()]) {
-        if (opt < 0) {
-          break;
-        }
-        act_option_data[i].push_back({opt, 0});
-        for (OptionID possopt : possible_options) {
-          if (possopt == opt) {
-            act_option_data[i].back().value = 1;
-          }
-        }
-      }
-    }
-    if (act_data.back().value && action.takes_squares()) {
-      act_target_data.back() = action.get_poss_squares(inputs.acteur);
-      if (act_target_data.back().size() == 0) {
-        act_data.back().value = false;
-      }
-    }
+  const auto& pieces{game.get_current_player().get_pieces()};
+  if (pieces.empty()) {
+    curr_options = {{CREATE_CHATEAU, 1}, {CREATE_PAYSAN, 1}};
+  } else if (pieces.size() == 2) {
+    curr_options = {};
+  } else if (board[pieces[0]].get_type() == PieceType::Chateau) {
+    curr_options = {{CREATE_CHATEAU, 0}, {CREATE_PAYSAN, 1}};
+  } else {
+    curr_options = {{CREATE_CHATEAU, 1}, {CREATE_PAYSAN, 0}};
   }
 }

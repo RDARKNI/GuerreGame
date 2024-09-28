@@ -16,7 +16,6 @@ Simple wrapper for platform-compatibility with windows
 #include <netinet/in.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -34,7 +33,25 @@ Simple wrapper for platform-compatibility with windows
 #define SD_BOTH SHUT_WR
 #endif
 
-static int startup() {
+#ifdef _WIN32
+inline int mysockopt(int a, int b, int c, const int* d, socklen_t e) {
+  const char opt = 0 + *d;  // ENDIANNESS FIX
+  return setsockopt(a, b, c, &opt, sizeof(opt));
+}
+#define setsockopt(a, b, c, d, e)                         \
+  e == sizeof(int) ? mysockopt(a, b, c, (const int*)d, e) \
+                   : setsockopt(a, b, c, (const char*)d, (int)e)
+#else
+inline int mysockopt(int a, int b, int c, const char* d,
+                     [[maybe_unused]] socklen_t e) {
+  const int opt = *d;  // will only be called for const char(e==1)
+  return setsockopt(a, b, c, &opt, sizeof(opt));
+}
+#define setsockopt(a, b, c, d, e) \
+  e == 1 ? mysockopt(a, b, c, (const char*)d, e) : setsockopt(a, b, c, d, e)
+#endif
+
+inline int startup() {
 #ifdef _WIN32
   WSADATA wsaData;
   return WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -42,12 +59,9 @@ static int startup() {
   return 0;
 #endif
 }
-
-static void cleanup() {
-#ifdef _WIN32
-  WSACleanup();
+#ifndef _WIN32
+inline int WSACleanup() { return 0; }
 #endif
-}
 
 #ifdef _WIN32
 #define close(socket) closesocket(socket)
@@ -59,7 +73,7 @@ static void cleanup() {
 
 #ifdef _WIN32
 #define LAST_ERR WSAGetLastError()
-static void pterror(const char *s) {
+inline void pterror(const char* s) {
   DWORD error = WSAGetLastError();  // Use GetLastError() for Winsock errors
 
   // Print the provided string followed by a colon and space
@@ -85,7 +99,7 @@ static void pterror(const char *s) {
 }
 #else
 #define LAST_ERR errno
-static void pterror(const char* s) { perror(s); }
+inline void pterror(const char* s) { perror(s); }
 #endif
 
 #endif

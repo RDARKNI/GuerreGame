@@ -4,77 +4,57 @@
 #include <vector>
 
 #include "../game_model/game.hpp"
+#include "../helpers/coords.hpp"
+#include "../helpers/dtos.hpp"
 #include "../helpers/user_input.hpp"
-#include "../ui/ncurses_setup.hpp"
-/*
-For communication between the Game and both the Controller and the UI
-Requests Data from the Game whenever prompted by the Controller and UI.
-*/
-struct SquareData {
-  int data;
-  SquareData() : data{0} {}
-  SquareData(int d) : data{d} {}
-  Piece_ID type() const { return static_cast<Piece_ID>(data & 0xF); }
-  int player() const { return (data >> 4) & 0xF; }
-  int fatigue() const { return (data >> 8) & 0xF; }
-  int hp() const { return (data >> 12); }
-};
-struct ActionDat {
-  ActionID type;
-  int value;
-};
-struct OptionDat {
-  OptionID type;
-  int value;
-};
-struct PlayerData {
-  int index;
-  int gold;
-};
-struct MenuItem {
-  const char* str;
-  int value;
-};
+
 class DataHandler {
  public:
-  DataHandler(const UserInput& inputs);
+  explicit DataHandler(UserInput init_settings);
 
-  std::vector<MenuItem> get_action_items() const;
-  std::vector<MenuItem> get_option_items() const;
+  SquareData get_square_data(Coord coords) const;
 
-  chtype get_sqdat(Coord coords) const;
-  SquareData get_piece_data(Coord coords) const;
+  // design issue
+  std::vector<SquareData> get_squares_data(
+      const std::vector<Coord>& coords) const;
 
-  const ActionDat& get_curr_action() const;
-  const std::vector<ActionDat>& get_curr_actions() const;
-  const std::vector<OptionDat>& get_curr_options() const;
+  const std::vector<Coord>& get_curr_actions() const { return curr_actions; }
+  const std::vector<Coord>& get_curr_options() const { return curr_options; }
+  const std::vector<Coord>& get_curr_targets() const { return curr_targets; }
+  const SquareData& get_curr_source() const { return curr_source; }
+  const SquareData& get_curr_target() const { return curr_target; }
+  const Coord& get_curr_player_data() const { return curr_player_data; }
+  const int& get_curr_turn() const { return curr_turn; }
 
-  const std::vector<Coord>& get_curr_targets() const;
+  Coord get_next_piece_coords(Coord dst) const;
+  Coord get_next_target_coords(Coord dst) const;
 
-  int get_current_turn() const;
-
-  const std::vector<UserInput>& get_history() const;
-
-  PlayerData get_current_player_data() const;
-
-  Coord get_next_piece_coords() const;
-  Coord get_next_target_coords() const;
-
-  int send_command();
-
+  void select_source(Coord source);
+  void select_action(int act) {
+    Action& action = *(game.actions[curr_actions[act].y]);
+    curr_options = action.get_poss_options(src);
+    curr_targets = action.get_poss_squares(src);
+  }
+  void select_target(Coord target) { curr_target = get_square_data(target); }
+  void refresh_player_data() {
+    curr_player_data.y = game.get_current_player().get_colour();
+    curr_player_data.x = game.get_current_player().get_gold();
+  }
+  void refresh_curr_turn() { curr_turn = game.get_current_turn(); }
   void start_selection();
-
-  void request_action_data();
+  int send_command(UserInput inputs) { return game.receive_command(inputs); }
 
  private:
   Game game;
-  std::vector<ActionDat> act_data;
-  std::vector<std::vector<OptionDat>> act_option_data;
-  std::vector<std::vector<Coord>> act_target_data;
-  std::vector<UserInput> history;
+  std::vector<Coord> curr_actions;
+  std::vector<Coord> curr_options;
+  std::vector<Coord> curr_targets;
+  SquareData curr_source;
+  SquareData curr_target;
+  Coord src;
+  Coord curr_player_data;
   const Board& board{game.get_board()};
-  const int& curr_turn{game.get_current_turn()};
-  const UserInput& inputs;
+  int curr_turn{game.get_current_turn()};
 };
 
 #endif

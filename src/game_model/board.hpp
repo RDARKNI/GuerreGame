@@ -1,56 +1,54 @@
 #ifndef BOARD_HPP
 #define BOARD_HPP
-#include <cassert>
+
 #include <vector>
 
-#include "../game_config.hpp"
 #include "../helpers/coords.hpp"
 #include "pion.hpp"
+
 class Board {
  public:
-  Pion*& operator[](Coord coords) {
-    assert(in_bounds(coords));
-    return board_[coords.y * B_W + coords.x];
-  }
-  const Pion* const& operator[](Coord coords) const {
-    return board_[coords.y * B_W + coords.x];
-  }
-  bool in_bounds(Coord c) const {
-    return c.y >= 0 && c.y < B_H && c.x >= 0 && c.x < B_W;
-  }
+  explicit Board(Coord dimensions)
+      : B_H{dimensions.y},
+        B_W{dimensions.x}  //, board(B_H * B_W, Pion())
+  {}
 
-  std::vector<Coord> get_neighbours(Coord square, int range = 1) const {
+  // template <class Self>
+  // constexpr auto&& operator[](this Self&& self, Coord coords) {
+  //   return std::forward<Self>(self).board_[coords.y * self.B_W + coords.x];
+  // }
+  Pion& operator[](Coord coords) { return board[coords.y * B_W + coords.x]; }
+  const Pion& operator[](Coord coords) const {
+    return board[coords.y * B_W + coords.x];
+  }
+  bool in_bounds(Coord c) const { return c.y < B_H && c.x < B_W; }
+
+  // 2*range
+  std::vector<Coord> get_neighbours(Coord square, char range = 1) const {
     std::vector<Coord> neighbours;
-    for (int i = 1; i <= range; ++i) {
-      if (square.y - i >= 0) {
-        neighbours.emplace_back(square.y - i, square.x);
-      }
-      if (square.y + i < B_H) {
-        neighbours.emplace_back(square.y + i, square.x);
-      }
-    }
-    // case i=0
-    for (int j = 1; j <= range; ++j) {
-      if (square.x - j >= 0) {
-        neighbours.emplace_back(square.y, square.x - j);
-      }
-      if (square.x + j < B_W) {
-        neighbours.emplace_back(square.y, square.x + j);
-      }
-    }
-    for (int i = 1; i <= range; ++i) {
-      for (int j = 1; j <= range - i; ++j) {
-        if (square.y - i >= 0 && square.x - j >= 0) {
-          neighbours.emplace_back(square.y - i, square.x - j);
+    int y{square.y};
+    int x{square.x};
+    for (int dy = 0; dy <= range; ++dy) {
+      for (int dx = 0; dx + dy <= range; ++dx) {
+        if (dy == 0 && dx == 0) {
+          continue;
         }
-        if (square.y - i >= 0 && square.x + j < B_W) {
-          neighbours.emplace_back(square.y - i, square.x + j);
+        int new_y{y + dy};
+        int new_x{x + dx};
+        if (new_y < B_H && new_x < B_W) {
+          neighbours.emplace_back(new_y, new_x);
         }
-        if (square.y + i < B_H && square.x - j >= 0) {
-          neighbours.emplace_back(square.y + i, square.x - j);
+        new_y = y - dy;
+        if (new_y >= 0 && new_x < B_W) {
+          neighbours.emplace_back(new_y, new_x);
         }
-        if (square.y + i < B_H && square.x + j < B_W) {
-          neighbours.emplace_back(square.y + i, square.x + j);
+        new_x = x - dx;
+        if (new_y >= 0 && new_x >= 0) {
+          neighbours.emplace_back(new_y, new_x);
+        }
+        new_y = y + dy;
+        if (new_y < B_H && new_x >= 0) {
+          neighbours.emplace_back(new_y, new_x);
         }
       }
     }
@@ -58,6 +56,15 @@ class Board {
   }
 
  private:
-  std::vector<Pion*> board_{B_H * B_W, nullptr};
+  /*
+  We store pointers to Pions here since otherwise we would need a 'NULL-pion'
+  which would make some things awkward compared to using a nullptr
+  */
+  std::array<Pion, 1024> board{Pion()};
+  char B_H;
+  char B_W;
+  // 1.024
+  // std::vector<Pion> board;
 };
+
 #endif

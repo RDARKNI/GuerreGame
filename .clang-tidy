@@ -1,0 +1,4 @@
+Checks: > 
+  performance-*,
+  clang-analyzer-*,
+  portability-*,

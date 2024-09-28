@@ -3,22 +3,24 @@
 
 #define MIN_H 5
 #define MIN_W 5
-#define MAX_H 30
-#define MAX_W 30
+#define MAX_H 32
+#define MAX_W 32
 #define MIN_PLAYERS 2
 #define MAX_PLAYERS 8
-#define DEBUGB
-enum Role { LOCAL = -1, HOST = 0, CLIENT = 1 };
+#define DEBUGB 1
+enum Role { LOCAL, CLIENT, HOST, ROLES };
 
-extern char ip_address[64];
-extern size_t PLAYER_INDEX;
-extern size_t PLAYER_COUNT;
-extern size_t B_H;
-extern size_t B_W;
-extern Role role;
-extern const char* player_names[9];
-#define FORESTATION 0.1  // in %, probability of each square being forrested
-#define GOLDDIST 0.000   // probability of each square having gold (inaccurate)
+inline char ip_address[32]{"127.000.000.001"};
+
+inline Role role;
+inline const char* player_names[9]{"Gaia",     "Player 1", "Player 2",
+                                   "Player 3", "Player 4", "Player 5",
+                                   "Player 6", "Player 7", "Player 8"};
+inline unsigned int seed;
+inline unsigned int goldgeneration;
+inline constexpr int forestgen_default{20};
+inline constexpr int forestgen_maximum{90};
+#define GOLDDIST 0.000  // probability of each square having gold (inaccurate)
 
 #define SEIZURE_REDUCTION 0
 

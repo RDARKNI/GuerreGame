@@ -1,89 +1,100 @@
 #include "game.hpp"
 
 #include <memory>
-#include <vector>
+#include <utility>
 
-#include "../game_config.hpp"
-#include "../helpers/action_data.hpp"
-#include "../helpers/error_data.hpp"
-#include "../helpers/piece_data.hpp"
-#include "board.hpp"
-#include "pion.hpp"
-
-Game::Game() {
+Game::Game(UserInput settings)
+    : board{settings.src},
+      initial_player_count{settings.dst.y},
+      curr_player_count{initial_player_count} {
   Action::board = &board;
-  Pion::board = &board;
   Player::board = &board;
+  Pion::players = &players;
   players.emplace_back(std::make_unique<Player>(0));
-  for (size_t i = 1; i < PLAYER_COUNT + 1; ++i) {
-    player_indices.emplace_back(i);
+  for (size_t i{1}; i < initial_player_count + 1; ++i) {
     players.emplace_back(std::make_unique<Player>(i));
   }
 }
-
-int Game::create_unit(int unit_type, Coord target) {
-  Piece_ID type;
-  switch (unit_type) {
-    case CREATE_FORET:
-      type = FORET;
-      break;
-    case CREATE_MINE:
-      type = MINE;
-      break;
-    case CREATE_CHATEAU:
-      type = CHATEAU;
-      break;
-    case CREATE_PAYSAN:
-      type = PAYSAN;
-      break;
-    default:
-      assert(0);
-      return EX_WRONG_OPTION;  // todo
-  }
-  players[curr_player_index]->add_piece(
-      std::make_unique<Pion>(*players[curr_player_index], type, target));
-  if (curr_player_index) {
-    if (!(curr_player_index == PLAYER_COUNT &&
-          players[curr_player_index]->get_pieces().size() == 2)) {
-      curr_player_index = (curr_player_index) % player_indices.size() + 1;
+int Game::kill_players() {
+  for (size_t i{1}; i < players.size(); ++i) {
+    int castle_count = 0;
+    for (const auto& piece : players[i]->get_pieces()) {
+      if (board[piece].get_type() == PieceType::Chateau) {
+        castle_count++;
+      }
+    }
+    if (!castle_count) {
+      players.erase(players.begin() + i);
+      if (curr_player_i >= i) {
+        --curr_player_i;
+      }
+      --curr_player_count;
+      return 1;
     }
   }
   return 0;
 }
 
-int Game::action(const UserInput& input) {
-  actions[board[input.acteur]->get_actions()[input.action]]->perform(
-      input.acteur, input.option, input.target);
+int Game::receive_command(const UserInput& inputs) {
+  if (inputs.act >= 0) {
+    return act(inputs);
+  } else if (inputs.act == END_TURN) {
+    return end_turn();
+  } else if (inputs.act == CREATE_UNIT) {
+    return create_unit(inputs);
+  }
+  std::unreachable();
+}
+
+int Game::act(const UserInput& inputs) {
+  actions[board[inputs.src].get_actions()[inputs.act]]->perform(
+      inputs.src, inputs.opt, inputs.dst);
   if (kill_players()) {
-    if (player_indices.size() == 1) {
-      return 100;
+    if (curr_player_count == 1) {
+      return 2;
     }
+    return 1;
   }
   return 0;
 }
 
 int Game::end_turn() {
-  players[curr_player_index]->end_turn();
   turn++;
-  curr_player_index = (curr_player_index) % player_indices.size() + 1;
-  players[curr_player_index]->start_turn();
+  curr_player_i = curr_player_i < players.size() - 1 ? curr_player_i + 1 : 1;
+  players[curr_player_i]->start_turn();
   return 0;
 }
 
-int Game::kill_players() {
-  for (int i = 1; i < players.size(); ++i) {
-    int count = 0;
-    for (const auto& piece : players[i]->get_pieces()) {
-      if (piece->get_type() == CHATEAU) {
-        count++;
-      }
-    }
-    if (!count) {
-      players.erase(players.begin() + i);
-      if (curr_player_index >= i) {
-        curr_player_index--;
-      }
-      player_indices.erase(player_indices.begin() + i - 1);
+int Game::create_unit(const UserInput& inputs) {
+  PieceType type;
+  switch (inputs.opt) {
+    case CREATE_FORET:
+      type = PieceType::Foret;
+      break;
+    case CREATE_MINE:
+      type = PieceType::Mine;
+      break;
+    case CREATE_CHATEAU:
+      type = PieceType::Chateau;
+      break;
+    case CREATE_PAYSAN:
+      type = PieceType::Paysan;
+      break;
+    default:
+      fprintf(stderr, "%d\n", (int)type);
+      assert(0);
+      std::unreachable();
+  }
+  assert(inputs.src.y < players.size());
+  Player& pl = *players[inputs.src.y];
+  board[inputs.dst] = Pion(type, pl, inputs.dst);
+  pl.add_piece(inputs.dst);
+  if (curr_player_i) {
+    if (curr_player_i != initial_player_count || pl.get_pieces().size() != 2) {
+      curr_player_i =
+          curr_player_i < players.size() - 1 ? curr_player_i + 1 : 1;
+    } else {
+      end_turn();
       return 1;
     }
   }

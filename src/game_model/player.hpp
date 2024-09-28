@@ -1,62 +1,58 @@
 #ifndef PLAYER_HPP
 #define PLAYER_HPP
-#include <memory>
 #include <vector>
 
 #include "../helpers/piece_data.hpp"
-class Pion;
+#include "board.hpp"
+#include "pion.hpp"
 class Player {
  public:
-  static inline Board *board;
+  inline static Board *board;
 
-  Player(size_t colour) : colour_{colour} { pieces_.reserve(B_H); };
-  int get_colour() const { return colour_; }
+  explicit Player(int colour) : colour(colour) { pieces_.reserve(30); };
 
+  unsigned char get_colour() const { return colour; }
   int get_gold() const { return gold_; }
   void change_gold(int g) { gold_ += g; }
 
-  bool get_is_their_turn() const { return is_their_turn_; }
-
   void start_turn() {
-    is_their_turn_ = true;
-    for (auto &piece : pieces_) {
-      if (piece->get_type() == CHATEAU) {
-        change_gold(+piece_constants[CHATEAU].prod);
+    for (Coord &piece : pieces_) {
+      if ((*board)[piece].get_type() == PieceType::Chateau) {
+        change_gold(+pieces_data[static_cast<size_t>(PieceType::Chateau)].prod);
       }
-      piece->start_turn();
+      (*board)[piece].start_turn();
     }
   }
-
-  void end_turn() { is_their_turn_ = false; }
 
   bool operator==(const Player &other) const = default;
 
-  const std::vector<std::unique_ptr<Pion>> &get_pieces() const {
-    return pieces_;
-  }
+  const std::vector<Coord> &get_pieces() const { return pieces_; }
 
-  void add_piece(std::unique_ptr<Pion> piece) {
-    pieces_.push_back(std::move(piece));
-    (*board)[pieces_.back()->get_coords()] = pieces_.back().get();
+  void add_piece(Coord piece_coords) {
+    for (Coord c : pieces_) {
+      assert(piece_coords != c);
+    }
+    pieces_.push_back(piece_coords);
   }
-
-  std::unique_ptr<Pion> remove_piece(Pion &piece) {
+  void remove_piece(Coord piece_coords) {
     for (auto it = pieces_.begin(); it != pieces_.end(); ++it) {
-      if ((*it).get() == &piece) {
-        std::unique_ptr<Pion> tmp = std::move(*it);
-        (*board)[tmp->get_coords()] = nullptr;
+      if (*it == piece_coords) {
         pieces_.erase(it);
-        return tmp;
+        return;
       }
     }
-    return nullptr;
+    assert(0);
+    std::unreachable();
   }
 
  private:
-  std::vector<std::unique_ptr<Pion>> pieces_;
-  size_t colour_;
+  /*
+  A vector of Pions will NOT work since the board needs pointers to pions and we
+  cannot have pointers to elements in vector (unstable)
+  */
+  std::vector<Coord> pieces_;
   int gold_{20};
-  bool is_their_turn_{false};
+  unsigned char colour;
 };
 
 #endif

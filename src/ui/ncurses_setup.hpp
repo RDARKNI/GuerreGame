@@ -1,14 +1,9 @@
 #ifndef __NCURSES_SETUP_H__
 #define __NCURSES_SETUP_H__
-
 #include <curses.h>
 
-#define COLOR_GREY 8
-#define COLOR_ORANGE 9
-
-extern int screen_height;
-extern int screen_width;
-extern const short player_colours[9];
+inline int screen_height{0};
+inline int screen_width{0};
 
 void init_ncurses();
 

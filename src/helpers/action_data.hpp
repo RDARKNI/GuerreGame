@@ -1,8 +1,11 @@
 #ifndef ACTION_ENUMS
 #define ACTION_ENUMS
+#include <array>
+/*
 
-// All <0 are special actions
-enum ActionID {
+All < 0 are special actions
+*/
+enum ActionID : char {
   CREATE_UNIT = -1,
   END_TURN = -2,
   ACTION = 0,
@@ -20,7 +23,10 @@ enum ActionID {
   ACTIONCOUNT,
 };
 
-enum OptionID {  // todo
+/*
+All < 0 are special actions
+*/
+enum OptionID : char {
   DUMMY = -1,
   CREATE_CHATEAU = 0,
   CREATE_PAYSAN = 1,
@@ -30,32 +36,36 @@ enum OptionID {  // todo
   CREATE_MINE = 5,
   OPTIONCOUNT = 6,
 };
-static const char* option_names[OPTIONCOUNT]{"Chateau",  "Paysan", "Seigneur",
-                                             "Guerrier", "Foret",  "Mine"};
+inline constexpr std::array<const char*, OPTIONCOUNT> option_names{
+    "Chateau", "Paysan", "Seigneur", "Guerrier", "Foret", "Mine"};
 
-static constexpr const char* action_names[ACTIONCOUNT] = {
+inline constexpr std::array<const char*, ACTIONCOUNT> action_names{
     "",     "Move",    "Attack",        "Build Unit", "Harvest", "Build Castle",
     "Idle", "Convert", "Become a Monk", "Cut",        "Explode", "Build Tower"};
 
-constexpr const OptionID action_options[ACTIONCOUNT][5]{
-    {CREATE_CHATEAU, CREATE_PAYSAN, DUMMY, DUMMY, DUMMY},
-    {DUMMY, DUMMY, DUMMY, DUMMY, DUMMY},
-    {DUMMY, DUMMY, DUMMY, DUMMY, DUMMY},
-    {CREATE_PAYSAN, CREATE_SEIGNEUR, CREATE_GUERRIER, DUMMY, DUMMY},
-    {DUMMY, DUMMY, DUMMY, DUMMY, DUMMY},
-    {DUMMY, DUMMY, DUMMY, DUMMY, DUMMY},
-    {DUMMY, DUMMY, DUMMY, DUMMY, DUMMY},
-    {DUMMY, DUMMY, DUMMY, DUMMY, DUMMY},
-    {DUMMY, DUMMY, DUMMY, DUMMY, DUMMY},
-    {DUMMY, DUMMY, DUMMY, DUMMY, DUMMY},
-    {DUMMY, DUMMY, DUMMY, DUMMY, DUMMY},
-    {DUMMY, DUMMY, DUMMY, DUMMY, DUMMY}};
+inline constexpr OptionID action_options[ACTIONCOUNT][4]{
+    {CREATE_CHATEAU, CREATE_PAYSAN, DUMMY, DUMMY},
+    {DUMMY, DUMMY, DUMMY, DUMMY},
+    {DUMMY, DUMMY, DUMMY, DUMMY},
+    {CREATE_PAYSAN, CREATE_SEIGNEUR, CREATE_GUERRIER, DUMMY},
+    {DUMMY, DUMMY, DUMMY, DUMMY},
+    {DUMMY, DUMMY, DUMMY, DUMMY},
+    {DUMMY, DUMMY, DUMMY, DUMMY},
+    {DUMMY, DUMMY, DUMMY, DUMMY},
+    {DUMMY, DUMMY, DUMMY, DUMMY},
+    {DUMMY, DUMMY, DUMMY, DUMMY},
+    {DUMMY, DUMMY, DUMMY, DUMMY},
+    {DUMMY, DUMMY, DUMMY, DUMMY}};
 
-static const bool action_takes_options[ACTIONCOUNT]{
-    true, false, false, true, false, false, false, false, false, false, false};
+inline constexpr bool action_takes_options(int act) {
+  for (OptionID opt : action_options[act]) {
+    if (opt != DUMMY) return true;
+  }
+  return false;
+}
 
-static const bool action_takes_squares[ACTIONCOUNT]{false, true,  true,  true,
-                                                    false, false, false, true,
-                                                    false, true,  false, true};
+inline constexpr bool action_takes_squares[ACTIONCOUNT]{
+    false, true, true,  true, false, false,
+    false, true, false, true, false, true};
 
 #endif
