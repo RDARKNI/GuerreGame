@@ -26,6 +26,12 @@ Simple wrapper for platform-compatibility with windows
 #define SHUT_RD SD_RECEIVE
 #define SHUT_RDWR SD_SEND
 #define SHUT_WR SD_BOTH
+
+#define EAGAIN WSAEWOULDBLOCK
+#define EWOULDBLOCK WSAEWOULDBLOCK
+#define EINTR WSAEINTR
+#define ECONNRESET WSAECONNRESET
+
 #else
 #define SOCKET unsigned int
 #define SD_RECEIVE SHUT_RD
@@ -48,7 +54,7 @@ inline int mysockopt(int a, int b, int c, const char* d,
   return setsockopt(a, b, c, &opt, sizeof(opt));
 }
 #define setsockopt(a, b, c, d, e) \
-  e == 1 ? mysockopt(a, b, c, (const char*)d, e) : setsockopt(a, b, c, d, e)
+  e == 1 ? mysockopt(a, b, c, (const char*)(d), e) : setsockopt(a, b, c, d, e)
 #endif
 
 inline int startup() {

@@ -12,7 +12,6 @@
             "console": "integratedTerminal", // Use the integrated terminal
             "args": [],
             "cwd": "${workspaceFolder}",
-            ^: true, // Run the program in a separate terminal
         },
         {
             "type": "lldb",

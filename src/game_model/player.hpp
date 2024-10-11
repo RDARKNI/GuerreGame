@@ -2,57 +2,48 @@
 #define PLAYER_HPP
 #include <vector>
 
-#include "../helpers/piece_data.hpp"
-#include "board.hpp"
-#include "pion.hpp"
+#include "../helpers/coords.hpp"
+enum class PlayerStatus : unsigned char {
+  gaia,
+  uninit,
+  alive,
+  dead,
+};
 class Player {
+  using enum PlayerStatus;
+
  public:
-  inline static Board *board;
-
-  explicit Player(int colour) : colour(colour) { pieces_.reserve(30); };
-
-  unsigned char get_colour() const { return colour; }
-  int get_gold() const { return gold_; }
-  void change_gold(int g) { gold_ += g; }
-
-  void start_turn() {
-    for (Coord &piece : pieces_) {
-      if ((*board)[piece].get_type() == PieceType::Chateau) {
-        change_gold(+pieces_data[static_cast<size_t>(PieceType::Chateau)].prod);
-      }
-      (*board)[piece].start_turn();
-    }
-  }
-
+  explicit Player(unsigned char colour, PlayerStatus state = uninit)
+      : colour{colour}, status{state} {};
+  explicit Player() : colour{0}, status{uninit} {}
   bool operator==(const Player &other) const = default;
 
-  const std::vector<Coord> &get_pieces() const { return pieces_; }
+  const std::vector<Coord> &get_pieces() const { return pieces; }
+  PlayerStatus get_status() const { return status; }
+  unsigned char get_colour() const { return colour; }
+  int get_gold() const { return gold; }
+  bool has_research(int i) const { return research & (1 << i); }
 
-  void add_piece(Coord piece_coords) {
-    for (Coord c : pieces_) {
-      assert(piece_coords != c);
-    }
-    pieces_.push_back(piece_coords);
-  }
+  void add_piece(Coord piece_coords) { pieces.push_back(piece_coords); }
   void remove_piece(Coord piece_coords) {
-    for (auto it = pieces_.begin(); it != pieces_.end(); ++it) {
+    for (auto it = pieces.begin(); it != pieces.end(); ++it) {
       if (*it == piece_coords) {
-        pieces_.erase(it);
+        pieces.erase(it);
         return;
       }
     }
-    assert(0);
     std::unreachable();
   }
+  void set_status(PlayerStatus new_status) { status = new_status; }
+  void change_gold(int g) { gold += g; }
+  void add_research(int i) { research += 1 << i; }
 
  private:
-  /*
-  A vector of Pions will NOT work since the board needs pointers to pions and we
-  cannot have pointers to elements in vector (unstable)
-  */
-  std::vector<Coord> pieces_;
-  int gold_{20};
+  std::vector<Coord> pieces;
   unsigned char colour;
+  PlayerStatus status;
+  int gold{20};
+  int research{0};
 };
 
 #endif

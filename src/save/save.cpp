@@ -4,12 +4,9 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
-/*
-  We need to encode board size and player count as well
-  width and height as {coords}?
-  {{B_H,B_W},pcount,save,{}}
-*/
+
 inline const std::filesystem::path dir_path{"guerre_savefiles/"};
+
 int save_game(const std::vector<UserInput>& moves) {
   std::filesystem::create_directory(dir_path);
   std::filesystem::path filepath =
@@ -27,12 +24,17 @@ int save_game(const std::vector<UserInput>& moves) {
 }
 
 std::vector<UserInput> load_game(const std::string& filename) {
-  std::string filepath{dir_path / filename};
+  std::filesystem::path path{dir_path / filename};
+  std::string filepath{path.string()};
   std::ifstream savefile{filepath, std::ios::binary | std::ios::in};
   std::vector<UserInput> hist;
   UserInput input;
+
   while (savefile.read(reinterpret_cast<char*>(&input), sizeof(input))) {
     hist.push_back(input);
+  }
+  if (savefile.gcount() % sizeof(input)) {
+    return {};
   }
   return hist;
 }

@@ -28,7 +28,7 @@
 
 2. **Compile Using Zig**:
     ```bash
-    zig c++ -o ./bin/windows/guerre.exe -I./extern/ ./src/main.cpp ./extern/libpdcurses.a ./src/input_parser.cpp ./src/ui/menu_ui.cpp ./src/ui/ncurses_setup.cpp ./src/game_model/pion.cpp ./src/game_model/game.cpp ./src/controller/controller.cpp ./src/controller/data_handler.cpp ./src/controller/network_helper.cpp -std=c++23 -target x86_64-windows -lws2_32
+    zig c++ -o ./bin/windows/guerre.exe -I./extern/ ./src/main.cpp ./extern/libpdcurses.a ./src/input/input_parser.cpp ./src/ui/menu_ui.cpp ./src/ui/ncurses_setup.cpp ./src/game_model/actions/action.cpp ./src/game_model/game.cpp ./src/controller/controller.cpp ./src/controller/data_handler.cpp ./src/network/network_helper.cpp ./src/save/save.cpp -std=c++23 -target x86_64-windows -lws2_32
     ```
 
 ## Dependencies and Licensing

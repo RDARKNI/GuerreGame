@@ -1,327 +1,188 @@
 #ifndef ACTION_HPP
 #define ACTION_HPP
-
-#include <queue>
-#include <unordered_set>
 #include <vector>
 
 #include "../../helpers/action_data.hpp"
 #include "../../helpers/coords.hpp"
+#include "../../helpers/piece_data.hpp"
 #include "../board.hpp"
+#include "../game.hpp"
 #include "../pion.hpp"
 #include "../player.hpp"
 
 class Action {
  public:
-  inline static Board* board;
-  virtual ~Action() = default;
+  Action(Game& game, Board& board) : game{game}, board{board} {}
+  Game& game;
+  Board& board;
   constexpr virtual ActionID get_type() const = 0;
-  constexpr bool takes_options() const {
-    return action_takes_options(get_type());
+  constexpr bool takes_options() const { return act_takes_options(get_type()); }
+  constexpr bool takes_squares() const { return act_takes_squares(get_type()); }
+  virtual bool other_cond(const Pion& actor) const {
+    return actor.get_fat() < 1;
   }
-  constexpr bool takes_squares() const {
-    return action_takes_squares[get_type()];
-  }
-  virtual bool get_fatigue_condition(Coord source) const {
-    return !board->operator[](source).get_fatigue();
-  }
-  virtual void perform(Coord source, int opt, Coord dst) const = 0;
-  virtual std::vector<Coord> get_poss_options(Coord source) const { return {}; }
+  virtual std::vector<OptionData> get_opts(const Pion&) const { return {}; }
+  virtual std::vector<Coord> get_dsts(Coord) const { return {}; }
+  virtual ActionStatus perform(const UserInput& in) = 0;
+  virtual ~Action() = default;
 
-  virtual const std::vector<Coord> get_poss_squares(Coord source) const {
-    return {};
-  };
+ protected:
+  Player& get_owner(const Pion& piece) {
+    return game.get_player(piece.get_player_i());
+  }
+  const Player& get_owner(const Pion& piece) const {
+    return game.get_player(piece.get_player_i());
+  }
+  ActionStatus helper_create_new_unit(Coord src, PieceType type, Coord dst);
+  std::vector<Coord> helper_get_free_neighbours(Coord src) const;
+  std::vector<Coord> helper_get_foe_neighbours(Coord src) const;
+  bool helper_can_afford(const Pion& actor, PieceType type) const;
 };
 
-class Attack final : public Action {
+class EndTurn : public Action {
  public:
-  constexpr ActionID get_type() const override { return ATTACK; }
-  void perform(Coord source, int, Coord dst) const override {
-    Player& target_player{(*board)[dst].get_player()};
-    (*board)[dst].change_pv(-(*board)[source].get_puiss());
-    if (!(*board)[dst]) {
-      target_player.remove_piece(dst);
-    }
-    (*board)[source].change_fatigue(2);
-  }
-  bool get_fatigue_condition(Coord source) const override {
-    return (*board)[source].get_fatigue() < 2;
-  }
-  const std::vector<Coord> get_poss_squares(Coord source) const override {
-    std::vector<Coord> squares;
-    const Pion& actor = (*board)[source];
-    const Player& player = actor.get_player();
-    for (const Coord square :
-         board->get_neighbours(source, actor.get_atkran())) {
-      const Pion& occ = (*board)[square];
-      if (occ && occ.get_player().get_colour() && occ.get_player() != player) {
-        squares.push_back(square);
-      }
-    }
-    return squares;
-  }
+  using Action::Action;
+  constexpr ActionID get_type() const override { return ActionID::end_turn; }
+  bool other_cond(const Pion&) const override { return true; }
+  ActionStatus perform(const UserInput&) override;
 };
 
-class BuildTower final : public Action {
+class CreateUnit : public Action {
  public:
-  constexpr ActionID get_type() const override { return BUILD_TOWER; }
-  void perform(Coord source, int, Coord dst) const override {
-    Player& player = (*board)[source].get_player();
-    (*board)[dst] = Pion(PieceType::Tour, player, dst);
-    player.add_piece(dst);
-    player.change_gold(-pieces_data[static_cast<size_t>(PieceType::Tour)].cout);
-  }
-
-  bool get_fatigue_condition(Coord source) const override {
-    const Pion& actor = (*board)[source];
-    return !actor.get_fatigue() &&
-           actor.get_player().get_gold() >=
-               pieces_data[static_cast<size_t>(PieceType::Tour)].cout;
-  }
-  const std::vector<Coord> get_poss_squares(Coord source) const override {
-    std::vector<Coord> squares;
-    for (const Coord square : board->get_neighbours(source)) {
-      if (!(*board)[square]) {
-        squares.push_back(square);
-      }
-    }
-    return squares;
-  }
+  using Action::Action;
+  constexpr ActionID get_type() const override { return ActionID::create_unit; }
+  std::vector<OptionData> get_opts(const Pion& actor) const override;
+  bool other_cond(const Pion&) const override { return game.get_turn() < 1; }
+  ActionStatus perform(const UserInput& in) override;
 };
 
 class BuildUnit final : public Action {
  public:
-  constexpr ActionID get_type() const override { return BUILD_UNIT; }
-
-  void perform(Coord source, int opt, Coord dst) const override {
-    Player& player = (*board)[source].get_player();
-    PieceType type;
-    switch (opt) {
-      case 0:
-        type = PieceType::Paysan;
-        break;
-      case 1:
-        type = PieceType::Seigneur;
-        break;
-      case 2:
-        type = PieceType::Guerrier;
-        break;
-    }
-    (*board)[dst] = Pion(type, player, dst);
-    player.add_piece(dst);
-    player.change_gold(-pieces_data[static_cast<size_t>(type)].cout);
-    (*board)[source].change_fatigue(+2);
-  }
-
-  std::vector<Coord> get_poss_options(Coord source) const override {
-    std::vector<Coord> opts = {
-        {CREATE_PAYSAN, 0}, {CREATE_SEIGNEUR, 0}, {CREATE_GUERRIER, 0}};
-    int gold = (*board)[source].get_player().get_gold();
-    if (gold >= pieces_data[static_cast<size_t>(PieceType::Paysan)].cout) {
-      opts[0].x = 1;
-    }
-    if (gold >= pieces_data[static_cast<size_t>(PieceType::Seigneur)].cout) {
-      opts[1].x = 1;
-    }
-    if (gold >= pieces_data[static_cast<size_t>(PieceType::Guerrier)].cout) {
-      opts[2].x = 1;
-    }
-    return opts;
-  }
-  const std::vector<Coord> get_poss_squares(Coord source) const override {
-    std::vector<Coord> squares;
-    for (const Coord square : board->get_neighbours(source)) {
-      if (!(*board)[square]) {
-        squares.push_back(square);
-      }
-    }
-    return squares;
-  }
+  using Action::Action;
+  constexpr ActionID get_type() const override { return ActionID::build_unit; }
+  std::vector<OptionData> get_opts(const Pion& actor) const override;
+  std::vector<Coord> get_dsts(Coord source) const override;
+  ActionStatus perform(const UserInput& in) override;
 };
 
-class Convert final : public Action {
+class BuildTower final : public Action {
  public:
-  constexpr ActionID get_type() const override { return CONVERT; }
-
-  void perform(Coord source, int, Coord dst) const override {
-    Player& source_player{(*board)[source].get_player()};
-    Player& target_player{(*board)[dst].get_player()};
-    (*board)[dst].set_player((*board)[source].get_player());
-    target_player.remove_piece(dst);
-    source_player.add_piece(dst);
-    (*board)[source].change_fatigue(+2);
-    (*board)[dst].change_fatigue(+2);
+  using Action::Action;
+  constexpr ActionID get_type() const override { return ActionID::build_tower; }
+  bool other_cond(const Pion& actor) const override {
+    return helper_can_afford(actor, PieceType::Tour);
   }
-
-  bool get_fatigue_condition(Coord source) const override {
-    return (*board)[source].get_fatigue() < 2;
-  }
-  const std::vector<Coord> get_poss_squares(Coord source) const override {
-    std::vector<Coord> squares;
-    const Pion& actor = (*board)[source];
-    const Player& player = actor.get_player();
-    for (const Coord square :
-         board->get_neighbours(source, actor.get_atkran())) {
-      const Pion& occ = (*board)[square];
-      if (occ && occ.get_player().get_colour() && occ.get_player() != player) {
-        squares.push_back(square);
-      }
-    }
-    return squares;
-  }
+  std::vector<Coord> get_dsts(Coord source) const override;
+  ActionStatus perform(const UserInput& in) override;
 };
 
-class Cut final : public Action {
+class BuildBombardier final : public Action {
  public:
-  constexpr ActionID get_type() const override { return CUT; }
-  void perform(Coord source, int, Coord dst) const override {
-    Pion& actor = (*board)[source];
-    int harvest = (*board)[dst].get_prod();
-    Player& target_player = (*board)[dst].get_player();
-    (*board)[dst].change_pv(-actor.get_puiss());
-    actor.get_player().change_gold(+harvest);
-    actor.change_fatigue(+2);
-    if (!(*board)[dst]) {
-      actor.get_player().change_gold(+harvest * 2);
-      target_player.remove_piece(dst);
-    }
+  using Action::Action;
+  constexpr ActionID get_type() const override { return ActionID::build_bomb; }
+  bool other_cond(const Pion& actor) const override {
+    return helper_can_afford(actor, PieceType::Bombardier);
   }
-  bool get_fatigue_condition(Coord source) const override {
-    return (*board)[source].get_fatigue() < 2;
-  }
-  const std::vector<Coord> get_poss_squares(Coord source) const override {
-    std::vector<Coord> squares;
-    for (const Coord square : board->get_neighbours(source)) {
-      const Pion& actee{(*board)[square]};
-      if (actee && !actee.get_player().get_colour()) {
-        squares.push_back(square);
-      }
-    }
-    return squares;
-  }
-};
-
-class DoNothing final : public Action {
- public:
-  constexpr ActionID get_type() const override { return IDLE; }
-
-  void perform(Coord source, int, Coord) const override {
-    (*board)[source].change_pv(+2);  // healing effect
-    (*board)[source].change_fatigue(+2);
-  }
+  std::vector<Coord> get_dsts(Coord source) const override;
+  ActionStatus perform(const UserInput& in) override;
 };
 
 class Explode final : public Action {
  public:
-  ActionID get_type() const override { return EXPLODE; }
-  void perform(Coord source, int, Coord) const override {
-    Pion& actor = (*board)[source];
-    for (Coord sq : board->get_neighbours(source)) {
-      if ((*board)[sq]) {
-        Player& target_player{(*board)[sq].get_player()};
-        (*board)[sq].change_pv(-actor.get_puiss());
-        if (!(*board)[sq]) {
-          target_player.remove_piece(sq);
-        }
-      }
-    }
-    actor.change_pv(-100);
+  using Action::Action;
+  ActionID get_type() const override { return ActionID::explode; }
+  ActionStatus perform(const UserInput& in) override;
+};
+
+class Cut final : public Action {
+ public:
+  using Action::Action;
+  constexpr ActionID get_type() const override { return ActionID::cut; }
+  bool other_cond(const Pion& actor) const override {
+    return actor.get_fat() < 2;
   }
+  std::vector<Coord> get_dsts(Coord source) const override;
+  ActionStatus perform(const UserInput& in) override;
+};
+
+class Attack final : public Action {
+ public:
+  using Action::Action;
+  constexpr ActionID get_type() const override { return ActionID::attack; }
+  bool other_cond(const Pion& actor) const override {
+    if (actor.get_type() == PieceType::Chateau &&
+        !get_owner(actor).has_research(0)) {
+      return false;
+    }
+    return actor.get_fat() < 2;
+  }
+  std::vector<Coord> get_dsts(Coord source) const override;
+  ActionStatus perform(const UserInput& in) override;
+};
+
+class Convert final : public Action {
+ public:
+  using Action::Action;
+  constexpr ActionID get_type() const override { return ActionID::convert; }
+  bool other_cond(const Pion& actor) const override {
+    return actor.get_fat() < 2;
+  }
+  std::vector<Coord> get_dsts(Coord source) const override;
+  ActionStatus perform(const UserInput& in) override;
+};
+
+class Idle final : public Action {
+ public:
+  using Action::Action;
+  constexpr ActionID get_type() const override { return ActionID::idle; }
+  ActionStatus perform(const UserInput& in) override;
 };
 
 class Harvest final : public Action {
  public:
-  constexpr ActionID get_type() const override { return FARM; }
-  void perform(Coord source, int, Coord) const override {
-    Pion& actor = (*board)[source];
-    actor.get_player().change_gold(actor.get_prod());
-    actor.change_fatigue(2);
-  }
-};
-
-template <>
-struct std::hash<Coord> {
-  std::size_t operator()(const Coord& c) const {
-    return (c.y << max_coord_bits) + c.x;
-  }
-};
-
-class Move final : public Action {
- public:
-  constexpr ActionID get_type() const override { return MOVE; }
-
-  void perform(Coord source, int, Coord dst) const override {
-    Player& player = (*board)[source].get_player();
-    (*board)[dst] = (*board)[source];
-    player.add_piece(dst);
-    (*board)[source] = Pion();
-    player.remove_piece(source);
-    (*board)[dst].change_fatigue(+1);
-  }
-
-  const std::vector<Coord> get_poss_squares(Coord source) const override {
-    std::vector<Coord> squares;
-    const Player& player = (*board)[source].get_player();
-    std::queue<Coord> visited{{source}};  // squares we can move through
-    std::unordered_set<Coord> bord{source};
-    int mov = (*board)[source].get_depl();
-    while (mov) {
-      for (size_t i{visited.size()}; i; --i) {
-        for (const Coord sq : board->get_neighbours(visited.front())) {
-          if (bord.count(sq)) {
-            continue;
-          }
-          bord.insert(sq);
-          const Pion& piece{(*board)[sq]};
-          if (!piece) {
-            squares.push_back(sq);
-            visited.push(sq);
-          } else if (player == piece.get_player()) {
-            visited.push(sq);
-          }
-        }
-        visited.pop();
-      }
-      --mov;
-    }
-    return squares;
-  }
+  using Action::Action;
+  constexpr ActionID get_type() const override { return ActionID::farm; }
+  ActionStatus perform(const UserInput& in) override;
 };
 
 class ToCastle final : public Action {
  public:
-  constexpr ActionID get_type() const override { return TO_CASTLE; }
-
-  void perform(Coord source, int, Coord) const override {
-    Player& player = (*board)[source].get_player();
-    (*board)[source] = Pion(PieceType::Chateau, player, source);
-    player.change_gold(
-        -pieces_data[static_cast<size_t>(PieceType::Chateau)].cout);
+  using Action::Action;
+  constexpr ActionID get_type() const override { return ActionID::to_castle; }
+  bool other_cond(const Pion& actor) const override {
+    return helper_can_afford(actor, PieceType::Chateau);
   }
-  bool get_fatigue_condition(Coord source) const override {
-    const Pion& actor = (*board)[source];
-    return !actor.get_fatigue() &&
-           actor.get_player().get_gold() >=
-               pieces_data[static_cast<size_t>(PieceType::Chateau)].cout;
-  }
+  ActionStatus perform(const UserInput& in) override;
 };
 
 class ToMonk final : public Action {
  public:
-  constexpr ActionID get_type() const override { return TO_MONK; }
-
-  bool get_fatigue_condition(Coord source) const override {
-    const Pion& actor = (*board)[source];
-    return !actor.get_fatigue() &&
-           actor.get_player().get_gold() >=
-               pieces_data[static_cast<size_t>(PieceType::Moine)].cout;
+  using Action::Action;
+  constexpr ActionID get_type() const override { return ActionID::to_monk; }
+  bool other_cond(const Pion& actor) const override {
+    return helper_can_afford(actor, PieceType::Moine);
   }
-  void perform(Coord source, int, Coord) const override {
-    Player& player = (*board)[source].get_player();
-    (*board)[source] = Pion(PieceType::Moine, player, source);
-    player.change_gold(
-        -pieces_data[static_cast<size_t>(PieceType::Moine)].cout);
-  }
+  ActionStatus perform(const UserInput& in) override;
 };
 
+class ResearchUpgrade final : public Action {
+ public:
+  using Action::Action;
+  constexpr ActionID get_type() const override {
+    return ActionID::research_upgrade;
+  }
+  bool other_cond(const Pion& actor) const override {
+    return !actor.get_fat() && !get_owner(actor).has_research(0);
+  }
+  virtual std::vector<OptionData> get_opts(const Pion& actor) const override;
+  ActionStatus perform(const UserInput& in) override;
+};
+
+class Move final : public Action {
+ public:
+  using Action::Action;
+  constexpr ActionID get_type() const override { return ActionID::move; }
+  std::vector<Coord> get_dsts(Coord source) const override;
+  ActionStatus perform(const UserInput& in) override;
+};
 #endif
