@@ -6,7 +6,7 @@
 #include "action_data.hpp"
 
 enum class PieceType : unsigned char {
-  Nullpion,
+  Sentinel,
   Chateau,
   Paysan,
   Guerrier,
@@ -14,8 +14,8 @@ enum class PieceType : unsigned char {
   Moine,
   Arbre,
   Mine,
-  Chevalier,  // not implemented yet, not sure  how to balance
-  Bombardier, // not implemented yet, not sure  how to balance
+  Chevalier,   // not implemented yet, not sure  how to balance
+  Bombardier,  // not implemented yet, not sure  how to balance
   Tour,
   Archer,
   PIECECOUNT
@@ -24,7 +24,7 @@ enum class PieceType : unsigned char {
 inline constexpr size_t max_actions{8};
 struct PieceConstants {
   const char name[16];
-  const std::array<ActionID, max_actions> actions;
+  const std::array<ActionID, 8> actions;
   const unsigned char sign;
   const unsigned char max_hp;
   const unsigned char depl;
@@ -37,7 +37,7 @@ struct PieceConstants {
 
 inline constexpr PieceConstants pieces_data[int(PieceType::PIECECOUNT)] = {
     {.name = "",
-     .actions = {ActionID::end_turn, ActionID::create_unit},
+     .actions = {ActionID::BuildChateau, ActionID::BuildPaysan},
      .sign = ' ',
      .max_hp = 0,
      .depl = 0,
@@ -47,8 +47,7 @@ inline constexpr PieceConstants pieces_data[int(PieceType::PIECECOUNT)] = {
      .cout = 0,
      .RESERVED = 0},
     {.name = "Chateau",
-     .actions = {ActionID::idle, ActionID::build_unit,
-                 ActionID::research_upgrade, ActionID::attack},
+     .actions = {ActionID::Idle, ActionID::BuildUnit, ActionID::Research, ActionID::Attack},
      .sign = 'C',
      .max_hp = 20,
      .depl = 0,
@@ -58,8 +57,7 @@ inline constexpr PieceConstants pieces_data[int(PieceType::PIECECOUNT)] = {
      .cout = 15,
      .RESERVED = 0},
     {.name = "Paysan",
-     .actions = {ActionID::idle, ActionID::move, ActionID::farm, ActionID::cut,
-                 ActionID::to_monk},
+     .actions = {ActionID::Idle, ActionID::Move, ActionID::Farm, ActionID::Cut, ActionID::ToMonk},
      .sign = 'P',
      .max_hp = 6,
      .depl = 2,
@@ -69,7 +67,7 @@ inline constexpr PieceConstants pieces_data[int(PieceType::PIECECOUNT)] = {
      .cout = 10,
      .RESERVED = 0},
     {.name = "Guerrier",
-     .actions = {ActionID::idle, ActionID::move, ActionID::attack},
+     .actions = {ActionID::Idle, ActionID::Move, ActionID::Attack},
      .sign = 'G',
      .max_hp = 10,
      .depl = 3,
@@ -79,8 +77,7 @@ inline constexpr PieceConstants pieces_data[int(PieceType::PIECECOUNT)] = {
      .cout = 15,
      .RESERVED = 0},
     {.name = "Seigneur",
-     .actions = {ActionID::idle, ActionID::move, ActionID::attack,
-                 ActionID::to_castle, ActionID::build_tower},
+     .actions = {ActionID::Idle, ActionID::Move, ActionID::Attack, ActionID::ToCastle, ActionID::BuildTower},
      .sign = 'S',
      .max_hp = 5,
      .depl = 1,
@@ -90,7 +87,7 @@ inline constexpr PieceConstants pieces_data[int(PieceType::PIECECOUNT)] = {
      .cout = 10,
      .RESERVED = 0},
     {.name = "Moine",
-     .actions = {ActionID::idle, ActionID::move, ActionID::convert},
+     .actions = {ActionID::Idle, ActionID::Move, ActionID::Convert},
      .sign = 'M',
      .max_hp = 3,
      .depl = 1,
@@ -120,7 +117,7 @@ inline constexpr PieceConstants pieces_data[int(PieceType::PIECECOUNT)] = {
      .cout = 0,
      .RESERVED = 0},
     {.name = "Chevalier",
-     .actions = {ActionID::idle, ActionID::move, ActionID::attack},
+     .actions = {ActionID::Idle, ActionID::Move, ActionID::Attack},
      .sign = 'K',
      .max_hp = 15,
      .depl = 1,
@@ -130,7 +127,7 @@ inline constexpr PieceConstants pieces_data[int(PieceType::PIECECOUNT)] = {
      .cout = 25,
      .RESERVED = 0},
     {.name = "Bombardier",
-     .actions = {ActionID::idle, ActionID::move, ActionID::explode},
+     .actions = {ActionID::Idle, ActionID::Move, ActionID::Explode},
      .sign = 'B',
      .max_hp = 1,
      .depl = 2,
@@ -140,7 +137,7 @@ inline constexpr PieceConstants pieces_data[int(PieceType::PIECECOUNT)] = {
      .cout = 10,
      .RESERVED = 0},
     {.name = "Tour",
-     .actions = {ActionID::idle, ActionID::attack, ActionID::build_bomb},
+     .actions = {ActionID::Idle, ActionID::Attack, ActionID::BuildBomb},
      .sign = 'T',
      .max_hp = 15,
      .depl = 0,
@@ -150,7 +147,7 @@ inline constexpr PieceConstants pieces_data[int(PieceType::PIECECOUNT)] = {
      .cout = 15,
      .RESERVED = 0},
     {.name = "Archer",
-     .actions = {ActionID::idle, ActionID::move, ActionID::attack},
+     .actions = {ActionID::Idle, ActionID::Move, ActionID::Attack},
      .sign = 'A',
      .max_hp = 6,
      .depl = 1,

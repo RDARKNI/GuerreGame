@@ -4,10 +4,10 @@
 enum class ParsedInput {
   up,
   down,
-  right,
   left,
+  right,
   next_valid,
-  conf,
+  confirm,
   back,
   next_turn,
   quit,

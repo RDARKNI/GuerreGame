@@ -33,17 +33,18 @@ class SubWin {
     }
     wrefresh(stdscr);
   }
+
   void refresh() { wrefresh(win); }
 
-  SubWin(const SubWin &other) = delete;
-  SubWin &operator=(const SubWin &other) = delete;
-  SubWin(SubWin &&other) noexcept = delete;
+  SubWin(const SubWin& other) = delete;
+  SubWin& operator=(const SubWin& other) = delete;
+  SubWin(SubWin&& other) noexcept = delete;
 
   /*
   instead of making the other delete everything, just delete the difference in
   size
   */
-  SubWin &operator=(SubWin &&other) noexcept {
+  SubWin& operator=(SubWin&& other) noexcept {
     if (this != &other) {
       if (win) {
         // WINDOW* copy =
@@ -77,11 +78,13 @@ class SubWin {
     }
     return *this;
   }
+
   void hide() {
     wclear(win);
     wrefresh(win);
   }
-  auto show(this auto &&self) {
+
+  auto show(this auto&& self) {
     werase(self.win);
     curs_set(0);
     self.display();
@@ -89,47 +92,36 @@ class SubWin {
     wrefresh(self.win);
   }
 
-  WINDOW *win;
+  WINDOW* win;
   Coord size;
   Coord pos;
 
-  SubWin(Coord size, Coord pos)
-      : win{subwin(stdscr, size.y, size.x, pos.y, pos.x)},
-        size{size},
-        pos{pos} {}
-  SubWin(Coord size, const SubWin &other, rel_pos dir, int v_off = 0,
-         int h_off = 0)
-      : size{size} {
+  SubWin(Coord size, Coord pos) : win{subwin(stdscr, size.y, size.x, pos.y, pos.x)}, size{size}, pos{pos} {}
+
+  SubWin(Coord size, const SubWin& other, rel_pos dir, int v_off = 0, int h_off = 0) : size{size} {
     switch (dir) {
       using enum rel_pos;
-      case above:
-        pos = Coord(other.pos.y - size.y - v_off, other.pos.x + h_off);
-        break;
-      case below:
-        pos = Coord(other.pos.y + other.size.y + v_off, other.pos.x + h_off);
-        break;
-      case right:
-        pos = {Coord(other.pos.y + v_off, other.pos.x + other.size.x + h_off)};
-        break;
-      case left:
-        pos = {Coord(other.pos.y + v_off, other.pos.x + size.x - h_off)};
-        break;
+      case above: pos = Coord(other.pos.y - size.y - v_off, other.pos.x + h_off); break;
+      case below: pos = Coord(other.pos.y + other.size.y + v_off, other.pos.x + h_off); break;
+      case right: pos = {Coord(other.pos.y + v_off, other.pos.x + other.size.x + h_off)}; break;
+      case left : pos = {Coord(other.pos.y + v_off, other.pos.x + size.x - h_off)}; break;
     }
     win = subwin(stdscr, size.y, size.x, pos.y, pos.x);
   }
 };
+
 template <typename T>
 class SubWindow : public SubWin {
  public:
-  SubWindow(Coord size, Coord pos, std::span<const char *const> strings,
-            const T *data)
+  SubWindow(Coord size, Coord pos, std::span<const char* const> strings, const T* data)
       : SubWin{size, pos}, strings{strings}, data{data} {}
-  SubWindow(Coord size, const SubWin &other, rel_pos dir,
-            std::span<const char *const> strings, const T *data, int v_off = 0,
-            int h_off = 0)
+
+  SubWindow(Coord size, const SubWin& other, rel_pos dir, std::span<const char* const> strings, const T* data,
+            int v_off = 0, int h_off = 0)
       : SubWin{size, other, dir, v_off, h_off}, strings{strings}, data{data} {}
-  std::span<const char *const> strings;
-  const T *data;
+
+  std::span<const char* const> strings;
+  const T* data;
 };
 
 class PlayerInfoWindow : public SubWindow<Coord> {
@@ -159,7 +151,7 @@ class PieceInfoWindow : public SubWindow<Pion> {
  public:
   void display() {
     if (*data) {
-      const PieceConstants &cdata = pieces_data[size_t(data->get_type())];
+      const PieceConstants& cdata = pieces_data[size_t(data->get_type())];
       wattrset(win, COLOR_PAIR(data->get_player_i()));
       mvwaddstr(win, 0, 0, cdata.name);
       wattrset(win, A_NORMAL);
@@ -171,6 +163,7 @@ class PieceInfoWindow : public SubWindow<Pion> {
       mvwprintw(win, 6, 0, strings[5], cdata.prod);
     }
   }
+
   // void display_preview(SquareData pdata) {
   //   const PieceConstants& cdata = pieces_data[size_t(pdata.type())];
   //   if (pdata.player() != data->player()) {
@@ -190,6 +183,7 @@ class PieceInfoWindow : public SubWindow<Pion> {
   //  mvwprintw(win, 6, 10, "%+d", strings[5], cdata.prod);
   //}
 };
+
 class TurnInfoWindow : public SubWindow<int> {
  public:
   using SubWindow::SubWindow;
@@ -197,9 +191,11 @@ class TurnInfoWindow : public SubWindow<int> {
  public:
   void display() { mvwprintw(win, 0, 0, strings[0], *data); }
 };
-class SaveFileMenu : public SubWindow<std::vector<const char *>> {
+
+class SaveFileMenu : public SubWindow<std::vector<const char*>> {
  public:
   using SubWindow::SubWindow;
+
   void move_cursor(size_t new_sely) {
     sely = new_sely;
     show();
@@ -208,7 +204,7 @@ class SaveFileMenu : public SubWindow<std::vector<const char *>> {
  public:
   void display() {
     size_t offs = 0;
-    if ((int)sely >= size.y) {
+    if (sely >= size.y) {
       offs = (sely - size.y) + 1;
     }
     for (size_t i = 0; i + offs < strings.size(); ++i) {
@@ -216,6 +212,7 @@ class SaveFileMenu : public SubWindow<std::vector<const char *>> {
       mvwaddstr(win, i, 0, strings[i + offs]);
     }
   }
+
   size_t sely;
 };
 
@@ -238,6 +235,7 @@ class MainMenuWindow : public SubWindow<void> {
       mvwaddstr(win, i, 0, strings[i]);
     }
   }
+
   size_t sely;
 };
 
@@ -263,8 +261,10 @@ class ActionWindow : public SubWindow<std::vector<ActionData>> {
       mvwaddstr(win, i, 0, strings[index((*data)[i].type)]);
     }
   }
+
   size_t sely;
 };
+
 class OptionWindow : public SubWindow<std::vector<OptionData>> {
  public:
   using SubWindow::SubWindow;
@@ -287,6 +287,7 @@ class OptionWindow : public SubWindow<std::vector<OptionData>> {
       mvwaddstr(win, i, 0, strings[index((*data)[i].type)]);
     }
   }
+
   size_t sely;
 };
 
@@ -322,6 +323,7 @@ class IPWindow : public SubWindow<char[32]> {
     }
     mvwaddstr(win, 0, 17, ip_address);
   }
+
   size_t sely;
   size_t selx;
 };
@@ -386,16 +388,13 @@ class SettingsWindow : public SubWindow<SettingsInput> {
 
 class BoardWindow : public SubWin {
  public:
-  BoardWindow(Coord size, Coord position,
-              const std::vector<Coord> &curr_targets, const Board &board,
-              const coordval &curr_player)
-      : SubWin{size, position},
-        curr_targets{&curr_targets},
-        board{&board},
-        curr_player{&curr_player} {
+  BoardWindow(Coord size, Coord position, const std::vector<Coord>& curr_targets, const Board& board,
+              const coordval& curr_player)
+      : SubWin{size, position}, curr_targets{&curr_targets}, board{&board}, curr_player{&curr_player} {
     wborder(win, '|', '|', '-', '-', '+', '+', '+', '+');
     wrefresh(win);
   }
+
   void move_cursor(Coord coords) {
     curs_set(2);
     wmove(win, 1 + coords.y, 1 + coords.x);
@@ -403,19 +402,29 @@ class BoardWindow : public SubWin {
   }
 
   void refresh_square(Coord coords) {
-    mvwaddch(win, 1 + coords.y, 1 + coords.x,
-             to_chtype((*board)[coords], false));
+    mvwaddch(win, 1 + coords.y, 1 + coords.x, to_chtype((*board)[coords], false));
   }
+
   void redraw_square(Coord coords) {
     refresh_square(coords);
     wrefresh(win);
   }
+
+  void redraw() {
+    discard_markings();
+    Coord c{0, 0};
+    for (c.y = 0; c.y < size.y - 2; ++c.y) {
+      for (c.x = 0; c.x < size.x - 2; ++c.x) {
+        refresh_square(c);
+      }
+    }
+    wrefresh(win);
+  }
+
   inline chtype to_chtype(Pion sqdat, bool mark = false) {
-    return sqdat.get_sign() |
-           COLOR_PAIR(sqdat.get_player_i() + (mark ? 16 : 0)) |
+    return sqdat.get_sign() | COLOR_PAIR(sqdat.get_player_i() + (mark ? 16 : 0)) |
            (WA_DIM *
-            int(sqdat.get_player_i() != 0 &&
-                (sqdat.get_fat() || sqdat.get_player_i() != *curr_player)));
+            int(sqdat.get_player_i() != 0 && (sqdat.get_fat() || sqdat.get_player_i() != *curr_player)));
   }
 
   void mark_squares() {
@@ -427,33 +436,36 @@ class BoardWindow : public SubWin {
     }
     wrefresh(win);
   }
+
   void unmark_squares() {
     for (size_t i{}; i < marked_squares.size(); ++i) {
-      Coord &c = marked_squares[i];
+      Coord& c = marked_squares[i];
       mvwaddch(win, 1 + c.y, 1 + c.x, to_chtype((*board)[c], false));
     }
     marked_squares.clear();
     wrefresh(win);
   }
+
   void discard_markings() { marked_squares.clear(); }
 
  private:
-  const std::vector<Coord> *curr_targets;
+  const std::vector<Coord>* curr_targets;
   std::vector<Coord> marked_squares;
-  const Board *board;
-  const coordval *curr_player;
+  const Board* board;
+  const coordval* curr_player;
 };
 
 class NewWindow {
  protected:
-  NewWindow(Coord size, Coord position)
-      : win{newwin(size.y, size.x, position.y, position.x)} {}
+  NewWindow(Coord size, Coord position) : win{newwin(size.y, size.x, position.y, position.x)} {}
+
   ~NewWindow() {
     delwin(win);
     touchwin(stdscr);
     refresh();
   }
-  WINDOW *win;
+
+  WINDOW* win;
 };
 
 constexpr inline Coord man_dims{17, 50};
@@ -526,7 +538,7 @@ inline void flash_screen() {
 
 inline void convert_anim(int cp) {
   chtype traits = A_STANDOUT | COLOR_PAIR(cp);
-  WINDOW *copy = newwin(screen_height, screen_width, 0, 0);
+  WINDOW* copy = newwin(screen_height, screen_width, 0, 0);
   overlay(stdscr, copy);
   wbkgd(stdscr, traits);
   refresh();

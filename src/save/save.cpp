@@ -10,9 +10,8 @@ inline const std::filesystem::path dir_path{"guerre_savefiles/"};
 int save_game(const std::vector<UserInput>& moves) {
   std::filesystem::create_directory(dir_path);
   std::filesystem::path filepath =
-      dir_path / (std::to_string(std::chrono::system_clock::to_time_t(
-                      std::chrono::system_clock::now())) +
-                  ".sav");
+      dir_path /
+      (std::to_string(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now())) + ".sav");
   std::ofstream savefile{filepath, std::ios::binary | std::ios::out};
 
   for (const UserInput& move : moves) {
@@ -48,6 +47,6 @@ std::vector<std::string> get_savefiles() {
       filenames.push_back(entry.path().filename().string());
     }
   }
-  std::sort(filenames.begin(), filenames.end(), std::greater<std::string>());
+  std::ranges::sort(filenames, std::greater<std::string>());
   return filenames;
 }

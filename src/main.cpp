@@ -15,13 +15,8 @@ int main() {
 #endif
   init_ncurses();
   while (true) {
-    MenuUI menu;
-    std::vector<UserInput> hist = menu.menu_loop();
-    if (hist.empty()) {
-      return 0;
-    }
-    // assert(0 <= B_H && B_H < max_h && 0 <= B_W && B_W < max_w && );
-
+    std::vector<UserInput> hist = MenuUI().menu_loop();
+    if (hist.empty()) { return 0; }
     hist = Controller{hist, role}.game_loop();
     save_game(hist);
     close_all_sockets();

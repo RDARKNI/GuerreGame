@@ -33,9 +33,7 @@ class Array {
   constexpr auto data(this auto&& self) { return self.dat; }
   constexpr auto& front(this auto&& self) { return self.dat[0]; }
   constexpr auto& back(this auto&& self) { return self.dat[N - 1]; }
-  constexpr auto& operator[](this auto&& self, size_type i) {
-    return self.dat[i];
-  }
+  constexpr auto& operator[](this auto&& self, size_type i) { return self.dat[i]; }
 
   constexpr auto& at(this auto&& self, int i) {
     if (i < 0 || i >= N) {
@@ -56,18 +54,12 @@ class Array {
   constexpr iterator end() noexcept { return dat + N; };
   constexpr const_iterator end() const noexcept { return dat + N; };
 
-  constexpr reverse_iterator rbegin() noexcept {
-    return reverse_iterator{end()};
-  }
+  constexpr reverse_iterator rbegin() noexcept { return reverse_iterator{end()}; }
   constexpr const_reverse_iterator rbegin() const noexcept {
     return const_reverse_iterator{cend()};
   }
-  constexpr reverse_iterator rend() noexcept {
-    return reverse_iterator{begin()};
-  }
-  constexpr const_reverse_iterator rend() const noexcept {
-    return const_reverse_iterator{begin()};
-  }
+  constexpr reverse_iterator rend() noexcept { return reverse_iterator{begin()}; }
+  constexpr const_reverse_iterator rend() const noexcept { return const_reverse_iterator{begin()}; }
   constexpr const_iterator cbegin() const noexcept { return begin(); }
   constexpr const_iterator cend() const noexcept { return end(); }
   constexpr const_reverse_iterator crbegin() const noexcept {

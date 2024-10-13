@@ -16,9 +16,7 @@ class Pion {
   unsigned char get_pv() const { return pv; }
   unsigned char get_fat() const { return fatigue; }
   const char* get_name() const { return pieces_data[index(type)].name; }
-  const std::array<ActionID, max_actions>& get_actions() const {
-    return pieces_data[index(type)].actions;
-  }
+  const std::array<ActionID, 8>& get_actions() const { return pieces_data[index(type)].actions; }
   unsigned char get_sign() const { return pieces_data[index(type)].sign; }
   unsigned char get_max_pv() const { return pieces_data[index(type)].max_hp; }
   unsigned char get_depl() const { return pieces_data[index(type)].depl; }
@@ -27,17 +25,11 @@ class Pion {
   unsigned char get_prod() const { return pieces_data[index(type)].prod; }
   unsigned char get_cout() const { return pieces_data[index(type)].cout; }
 
-  explicit operator bool() const { return type != PieceType::Nullpion; }
+  explicit operator bool() const { return type != PieceType::Sentinel; }
 
   void set_player(unsigned char other) { player_i = other; }
-  void start_turn() { this->change_fatigue(-3); }
-  void change_fatigue(int i) {
-    if (fatigue + i > 0) {  // fatigue+i is int so overflow is fine
-      fatigue += i;
-    } else {
-      fatigue = 0;
-    }
-  }
+  void start_turn() { change_fatigue(-3); }
+  void change_fatigue(int i) { fatigue = fatigue + i > 0 ? fatigue + i : 0; }
   void change_pv(int val) {
     int new_pv{pv + val};  // int for overflow handling
     if (new_pv > get_max_pv()) {

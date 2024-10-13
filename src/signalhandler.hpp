@@ -3,6 +3,7 @@
 
 #ifndef SIGNNN
 #define SIGNNN
+#include <curses.h>
 #include <execinfo.h>
 #include <signal.h>
 
@@ -12,7 +13,7 @@
 inline void sigint_handler(int signum = 0) {
   endwin();
   shutdown_network();
-#ifdef DDEBUG
+
   if (signum == SIGSEGV) {
     printf("\nCaught SEGFAULT\n");
     void *array[10];
@@ -27,7 +28,6 @@ inline void sigint_handler(int signum = 0) {
   } else {
     printf("\nCaught SIGINT (Ctrl+C). Cleaning up...\n");
   }
-#endif
   exit(signum);
 }
 

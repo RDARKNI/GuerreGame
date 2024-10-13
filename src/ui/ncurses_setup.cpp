@@ -1,5 +1,7 @@
 #include "ncurses_setup.hpp"
 
+#include <curses.h>
+
 // process attach --name guerre --waitfor
 
 void init_ncurses() {
